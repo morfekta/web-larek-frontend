@@ -55,25 +55,17 @@ export interface IProduct {
 }
 ```
 
-Массив товаров с сервера
-```
-export interface IProductList {
-  total: number;
-  items: IProduct[];
-}
-```
-
-Типы оплаты
+Способы оплаты
 ```
 export enum PaymentMethod {
-  Online = 'online',
-  Cash = 'cash'
+  Card = 'card',
+  Cash = 'cash',
 }
 ```
 
-Форма заказа (вводимые пользователем данные)
+Данные формы заказа
 ```
-export interface IOrderFormState {
+export interface IOrderForm {
   payment: PaymentMethod;
   email: string;
   phone: string;
@@ -83,59 +75,32 @@ export interface IOrderFormState {
 
 Заказ, отправляемый на сервер
 ```
-export interface IOrderRequest extends IOrderFormState {
+export interface IOrder extends IOrderForm {
   total: number;
   items: IProduct['id'][];
 }
 ```
 
-Элемент корзины
+Ответ сервера
 ```
-export interface ICartItem {
-  id: IProduct['id'];
-  title: IProduct['title'];
-  price: IProduct['price'];
-}
-```
-
-Корзина
-```
-export interface ICart {
-  items: ICartItem[];
+export interface IOrderResponse {
+  id: string;
   total: number;
 }
 ```
 
 Ошибки формы
 ```
-export type FormErrors = Partial<Record<keyof IOrderFormState, string>>;
+export type FormErrors<T extends object> = Partial<Record<keyof T, string>>;
 ```
 
-Типы для представления
-
-Товар для отображения в каталоге
+Состояние приложения
 ```
-export type TProductCatalog = Pick<IProduct, 'image' | 'title' | 'category' | 'price'>;
-```
-
-Товар для отображения в карточке товара
-```
-export type TProductCard = Pick<IProduct, 'description' | 'image'| 'title' | 'category' | 'price'>;
-```
-
-Товар для отображения в корзине
-```
-export type TProductCart = Pick<IProduct, 'title' | 'price'>;
-```
-
-Первая часть оформления заказа
-```
-export type TOrderFirstPart = Pick<IOrderFormState, 'payment' | 'address'>;
-```
-
-Вторая часть оформления заказа
-```
-export type TOrderSecondPart = Pick<IOrderFormState, 'email' | 'phone'>;
+export interface IAppState {
+  products: IProduct[];
+  preview: string | null;
+  basket: IProduct[];
+}
 ```
 
 ## Архитектура приложения
@@ -150,149 +115,194 @@ export type TOrderSecondPart = Pick<IOrderFormState, 'email' | 'phone'>;
 #### Класс Api
 Содержит в себе базовую логику отправки запросов. В конструктор передается базовый адрес сервера и опциональный объект с заголовками запросов.
 Методы: 
-- `get` - выполняет GET запрос на переданный в параметрах ендпоинт и возвращает промис с объектом, которым ответил сервер
-- `post` - принимает объект с данными, которые будут переданы в JSON в теле запроса, и отправляет эти данные на ендпоинт, переданный как параметр при вызове метода. По умолчанию выполняется `POST` запрос, но метод запроса может быть переопределен заданием третьего параметра при вызове.
+- `handleResponse(response: Response): Promise<object>` - если response.ok, возвращает распарсенный JSON; иначе читает тело ошибки и отклоняет промис.
+- `get(uri: string): Promise<object>` - выполняет GET запрос по адресу baseUrl + uri и обрабатывает ответ через `handleResponse`.
+- `post(uri: string, data: object, method: ApiPostMethods = 'POST'): Promise<object>` - выполняет запрос POST, PUT или DELETE к baseUrl + uri с JSON-телом data, возвращает результат через `handleResponse`
 
-#### Класс EventEmitter
-Брокер событий позволяет отправлять события и подписываться на события, происходящие в системе. Класс используется в презентере для обработки событий и в слоях приложения для генерации событий.  
+#### Слой событий: EventEmitter  
+Брокер событий позволяет отправлять события и подписываться на события, происходящие в системе.. Класс используется в презентере для обработки событий и в слоях приложения для генерации событий.  
 Основные методы, реализуемые классом описаны интерфейсом `IEvents`:
-- `on` - подписка на событие
-- `emit` - инициализация события
-- `trigger` - возвращает функцию, при вызове которой инициализируется требуемое в параметрах событие   
 
-### Слой данных
+**Методы:**  
+- `on(event: string \| RegExp, handler: Function): void` — подписка на событие или паттерн.  
+- `emit(event: string, data?: any): void` — генерация события с именем и данными.  
+- `onAll(handler: ({ eventName, data }) => void): void` — подписка на все события (например, для логирования).
 
-#### Класс ProductState
-Отвечает за хранение товаров и логики предпросмотра. Конструктор класса принимает инстант брокера событий
+#### Базовый UI-компонент: Component<T>  
+Родитель для всех View-классов, умеет «привязывать» данные к DOM. В дженерик принимает тип объекта, в котором данные будут передаваться в метод render для отображения данных в компоненте. В конструктор принимает элемент разметки, являющийся основным родительским контейнером компонента. Содержит метод render, отвечающий за сохранение полученных в параметре данных в полях компонентов через их сеттеры, возвращает обновленный контейнер компонента.
 
-Поля:
-- `products: IProduct[]` — массив товаров
-- `preview: string | null` — id выбранного товара
+**Конструктор:**  
+- `new Component(container: HTMLElement)` — сохраняет корневой элемент.
 
-Методы:
-- `setProducts(products: IProduct[])` — сохраняет список товаров и генерирует событие `products:changed`
-- `setPreview(id: string | null)` — устанавливает товар в предпросмотр и генерирует `preview:changed`
-- `getProduct(id: string): IProduct | undefined` — возвращает товар по id
+**Методы:**  
+- `render(data: Partial<T>): HTMLElement` — вызывает все подходящие сеттеры и возвращает обновлённый контейнер.  
+- `setText(el: HTMLElement \| undefined, text: string): void` — обновляет `textContent`.  
+- `setImage(el: HTMLImageElement \| undefined, src: string, alt: string): void` — обновляет `src` и `alt`.  
+- `setDisabled(el: HTMLElement \| undefined, state: boolean): void` — добавляет/удаляет `disabled`.  
+- `toggleClass(el: HTMLElement \| undefined, className: string, state: boolean): void` — переключает CSS-класс.
 
-#### Класс CartState
-Отвечает за хранение выбранных товаров и подсчёт суммы. Конструктор класса принимает инстант брокера событий
+### Слой данных AppState
+Отвечает за бизнес-логику: хранение товаров, корзины и процесса оформления заказа. Управляет:
+- Каталогом: загрузка списка товаров `setProducts`, выбор предпросмотра `setPreview`.
+- Корзиной: добавление/удаление товаров `toggleProduct`, подсчёт суммы `getTotal`, очистка `clearCart`.
+- Формой заказа: хранение полей `orderForm`, ошибок `formErrors`, обновление полей `setOrderField`, валидацию шагов оформления `validateStep`, отправку заказа `submitOrder`.
 
-Поля:
-- `items: ICartItem[]` — массив товаров в корзине
+**Конструктор:**  
+- `new AppState(initialState: IAppState, events: IEvents)` — создаёт модель с начальным `IAppState` и брокером событий.
 
-Методы:
-- `add(product: IProduct)` — добавляет товар в корзину
-- `remove(id: string)` — удаляет товар
-- `clear()` — очищает корзину
-- `has(id: string): boolean` — проверка наличия товара
-- `getCart(): ICart` — возвращает корзину с total
+**Поля:**  
+- `products: Product[]` — загруженный каталог.  
+- `preview: string|null` — ID товара для предпросмотра.  
+- `basket: Product[]` — список выбранных товаров.  
+- `orderForm: IOrderForm` — текущие значения полей (payment, email, phone, address).  
+- `formErrors: FormErrors<IOrderForm>` — накопленные ошибки валидации.
 
-#### Класс OrderState
-Хранит форму заказа, ошибки и генерирует данные на отправку. Конструктор класса принимает инстант брокера событий
-
-Поля:
-- `form: Partial<IOrderFormState>` — вводимые пользователем поля
-- `errors: FormErrors` — ошибки валидации
-
-Методы:
-- `update(data: Partial<IOrderFormState>)` — обновляет форму
-- `validateStep1(): boolean` — проверяет оплату и адрес
-- `validateStep2(): boolean` — проверяет email и телефон
-- `getRequest(cart: ICart): IOrderRequest` — собирает финальный заказ
-- `clear()` — сбрасывает состояние формы
+**Методы:**  
+- `setProducts(items: IProduct[]): void` — сохраняет товары, эмитит `items:changed`.  
+- `setPreview(item: Product): void` — сохраняет ID предпросмотра, эмитит `preview:changed`.  
+- `toggleProduct(item: Product): void` — добавляет/удаляет из корзины (`price!==null`), эмитит `basket:changed`.  
+- `getTotal(): number` — считает сумму цен в корзине.  
+- `clearCart(): void` — очищает корзину, эмитит `basket:changed`.  
+- `setOrderField(field: keyof IOrderForm, value: any): void` — обновляет поле формы, запускает `validateStep`.  
+- `validateStep(step: 'delivery'|'contacts', changedField?: keyof IOrderForm): boolean` — проверяет поля текущего шага, эмитит `orderForm:validated`.  
+- `submitOrder(): void` — финальная валидация обоих шагов и эмит `orderForm:submitted`.
 
 ### Классы представления
 Все классы представления отвечают за отображение внутри контейнера (DOM-элемент) передаваемых в них данных.
 
-#### Базовый Класс Component
-Класс является дженериком и родителем всех компонентов слоя представления. В дженерик принимает тип объекта, в котором данные будут передаваться в метод render для отображения данных в компоненте. В конструктор принимает элемент разметки, являющийся основным родительским контейнером компонента. Содержит метод render, отвечающий за сохранение полученных в параметре данных в полях компонентов через их сеттеры, возвращает обновленный контейнер компонента.
+### Page
+Управляет шапкой, счётчиком и галереей товаров.
 
-#### Класс Modal
-Реализует модальное окно. Так же предоставляет методы `open` и `close` для управления отображением модального окна. Устанавливает слушатели на клавиатуру, для закрытия модального окна по Esc, на клик в оверлей и кнопку-крестик для закрытия попапа.  
-- constructor(selector: string, events: IEvents) Конструктор принимает селектор, по которому в разметке страницы будет идентифицировано модальное окно и экземпляр класса `EventEmitter` для возможности инициации событий.
+**Конструктор:**  
+- `new Page(container: HTMLElement, events: IEvents)` — находит элементы:  
+- `.header__basket-counter`,  
+- `.gallery`,  
+- `.page__wrapper`,  
+- `.header__basket` (клик → `basket:open`).
 
-Поля класса
-- modal: HTMLElement - элемент модального окна
-- events: IEvents - брокер событий
+**Сеттеры:**  
+- `counter: number` — обновляет счётчик.  
+- `products: HTMLElement[]` — вставляет карточки в галерею.  
+- `locked: boolean` — блокирует/разблокирует фон (CSS-класс).
 
-#### Класс Page
-Компонент, управляющий основным содержимым страницы. Отвечает за контейнер каталога, отображение состояния корзины. В конструкторе принимает DOM-контейнер страницы и экземпляр брокера событий.
+### Modal 
+Универсальный контейнер для модальных окон.
 
-#### Класс ModalPreviewProduct
-Модальное окно, отображающее подробную информацию о товаре.
+**Конструктор:**  
+- `new Modal(container: HTMLElement, events: IEvents)` — находит:  
+- `.modal__close` (кнопка),  
+- `.modal__content`;  
+вешает слушатели закрытия (клик и оверлей).
 
-Поля:
-- `imageElement: HTMLImageElement` — изображение товара
-- `titleElement: HTMLElement` — название
-- `descriptionElement: HTMLElement` — описание
-- `categoryElement: HTMLElement` — категория
-- `priceElement: HTMLElement` — цена
-- `buyButton: HTMLButtonElement` — кнопка "В корзину"
+**Сеттеры:**
+- `set content(value: HTMLElement)` — заменяет дочерние элементы блока `.modal__content` на переданный элемент `value`.
 
-#### Класс ModalCart
-Модальное окно, отображающее содержимое корзины.
+**Методы:**  
+- `render({ content: HTMLElement }): HTMLElement` — заменяет дочерние элементы, вызывает `open()`.  
+- `open(): void` — добавляет класс `modal_active` и эмит `modal:open`.  
+- `close(): void` — убирает класс, очищает контент, эмит `modal:close`.
 
-Поля:
-- `listContainer: HTMLElement` — контейнер для списка товаров
-- `totalElement: HTMLElement` — элемент с суммой заказа
-- `checkoutButton: HTMLButtonElement` — кнопка перехода к оформлению
+### Basket 
+Отображает содержимое корзины и кнопку «Оформить».
 
-#### Класс ModalFirstForm
-Расширяет класс Modal. Модальное окно с формой выбора способа оплаты и адреса доставки.
+**Конструктор:**  
+- `new Basket(container: HTMLElement, events: IEvents)` — находит:  
+  - `.basket__list`,  
+  - `.basket__price`,  
+  - `.basket__button` (клик → `order:open`).
 
-Поля:
-- `addressInput: HTMLInputElement` — поле адреса
-- `paymentRadioInputs: NodeListOf<HTMLInputElement>` — список переключателей оплаты
+**Сеттеры:**  
+- `items: HTMLElement[]` — рендерит список или «Корзина пуста».  
+- `selected: string[]` — включает/выключает кнопку оформления.  
+- `total: number` — обновляет текст цены.
 
-Методы:
-- `getInputValues(): TOrderFirstPart` — возвращает заполненные данные
-- `setError(...)` — отображает ошибки
-- `setValid(...)` — активирует/деактивирует кнопку отправки
+### Card
+Карточка товара: в каталоге, в просмотре и в корзине.
 
-#### Класс ModalSecondForm
-Расширяет класс Modal. Модальное окно с формой ввода email и телефона.
+**Конструктор:**  
+- `new Card(root: HTMLElement, actions?: { onClick(e): void })` — находит элементы, вешает клик.
 
-Поля:
-- `emailInput: HTMLInputElement`
-- `phoneInput: HTMLInputElement`
+**Сеттеры:**  
+- `id: string` — data-id.  
+- `title: string`, `description: string`, `image: string`, `category: string`, `price: number|null`.  
+- `buttonText: string` — «В корзину» / «Убрать».  
+- `index: number` — порядковый номер в списке.
 
-Методы:
-- `getInputValues(): TOrderSecondPart`
-- `setError(...)`
-- `setValid(...)`
+### DeliveryStep (Checkout.ts)
+Первый шаг оформления заказа: выбор оплаты и ввод адреса.
 
-#### Класс ModalSuccess
-Расширяет класс Modal. Модальное окно с сообщением об успешной оплате заказа.
+**Конструктор:**  
+- `new DeliveryStep(container: HTMLFormElement, events: IEvents)` — наследует `Form`, дополнительно вешает клики по `button[name=card]`/`[name=cash]` → `order.payment:change`.
 
-Поля:
-- `messageElement: HTMLElement` — текстовое сообщение
-- `closeButton: HTMLButtonElement` — кнопка "Закрыть" или "Вернуться"
+**Сеттеры:**  
+- `payment: PaymentMethod` — подсветка активной кнопки.  
+- `address: string` — наполнение `input[name=address]`.
+
+### CustomerStep (Checkout.ts)
+Второй шаг: ввод email и телефона.
+
+**Конструктор:**  
+- `new CustomerStep(container: HTMLFormElement, events: IEvents)` — наследует `Form`, обработка `input` идёт в базовом классе.
+
+**Сеттеры:**  
+- `email: string` — заполняет `input[name=email]`.  
+- `phone: string` — заполняет `input[name=phone]`.
+
+### Success  
+Экран успешного заказа.
+
+**Конструктор:**  
+- `new Success(container: HTMLElement, actions: { onClick(): void })` — находит `.order-success__close`.
+
+**Сеттеры:**  
+- `total: number` — обновляет текст «Списано X синапсов».
 
 ### Слой коммуникации
 
-#### Класс AppApi
-Принимает в конструктор экземпляр класса Api и предоставляет методы реализующие взаимодействие с бэкендом сервиса.
+#### API: WebLarekAPI  
+Отвечает за взаимодействие с бэкендом и CDN: загрузку товаров и отправку заказа.
 
-## Взаимодействие компонентов
+**Конструктор:**  
+- `new WebLarekAPI(baseCdnUrl: string, baseApiUrl: string)` — инициализирует клиент с URL-адресами CDN и API.
+
+**Методы:**  
+- `getProductList(): Promise<IProduct[]>` — выполняет `GET /product/`, возвращает массив `IProduct`.  
+- `order(data: IOrder): Promise<IOrderResponse>` — выполняет `POST /order` с телом `{ total, items, … }`, возвращает `{ id, total }`.  
+
+## Взаимодействие компонентов - Presenter
 Код, описывающий взаимодействие представления и данных между собой находится в файле `index.ts`, выполняющем роль презентера.\
 Взаимодействие осуществляется за счет событий генерируемых с помощью брокера событий и обработчиков этих событий, описанных в `index.ts`\
 В `index.ts` сначала создаются экземпляры всех необходимых классов, а затем настраивается обработка событий.
 
+Связывает Model и View через события:
+
+1. **Инициализация**: создаёт `EventEmitter`, `WebLarekAPI`, `AppState`, клонирует шаблоны, создаёт компоненты.  
+2. **Каталог**: `items:changed` → `renderCatalog`.  
+3. **Предпросмотр**: `card:select` → `setPreview` → `preview:changed` → `Modal.render`.  
+4. **Корзина**: `product:toggle` → `basket:changed` → `renderBasket`; `basket:open` → окно корзины.  
+5. **Оформление**:  
+   - `order:open` → `DeliveryStep`.  
+   - `order.xxx:change` → `setOrderField` → `orderForm:validated`.  
+   - `order:submit` → `CustomerStep`.  
+   - `contacts:submit` → `submitOrder` → `orderForm:submitted` → API → `Success`.  
+6. **Блокировка фона**: слушает `modal:open`/`modal:close` → `page.locked`.  
+
 ### События изменения данных (генерируются классами моделей данных)
 
-- `products:changed` — загружен новый список товаров (вызывается `ProductState.setProducts`)
-- `preview:changed` — выбран товар для предпросмотра (`ProductState.setPreview`)
-- `cart:changed` — изменилось содержимое корзины (добавление, удаление, очистка)
-- `order:changed` — изменились поля формы оформления заказа
-- `order:validated` — результат валидации формы (валидна или есть ошибки)
+- `items:changed` — появились или обновились данные каталога (вызывается в `setProducts`).
+- `preview:changed` — выбран товар для предпросмотра (вызывается в `setPreview`).
+- `basket:changed` — изменилось содержимое корзины (вызывается в `toggleProduct` и `clearCart`), в data передаются `{ items: Product[]; total: number }`.
+- `orderForm:validated` — результат валидации текущего шага оформления (`validateStep`), в data передаётся `{ errors: FormErrors<IOrderForm>; valid: boolean }`.
+- `orderForm:submitted` — форма заказа прошла полную валидацию и готова к отправке (`submitOrder`), в data передаётся `{ order: IOrderForm; total: number; items: string[] }`.
 
 ### События, возникающие при взаимодействии пользователя с интерфейсом (генерируются классами, отвечающими за представление)
 
-- `product:select` — пользователь выбрал товар в каталоге для предпросмотра (отправляется из `CatalogItem` или аналога)
-- `product:addToCart` — пользователь нажал кнопку "В корзину" в модалке товара
-- `cart:open` — клик по иконке корзины в `Page`, открытие модалки с корзиной
-- `cart:checkout` — переход от корзины к оформлению заказа
-- `order:step1:submit` — отправка первой части формы заказа (способ оплаты и адрес)
-- `order:step2:submit` — отправка второй части формы заказа (email и телефон)
-- `order:completed` — заказ успешно оформлен, отображается окно успешной оплаты
-- `form:input` — пользователь изменил значение в любом из полей формы
+- `card:select` — пользователь кликнул по карточке товара в галерее.
+- `product:toggle` — пользователь нажал «В корзину» или «Убрать из корзины» в карточке товара.
+- `basket:open` — пользователь открыл окно корзины (клик по иконке в шапке).
+- `order:open` — пользователь нажал кнопку «Оформить» в корзине.
+- `order:submit` — пользователь нажал «Далее» в первом шаге оформления (способ оплаты + адрес).
+- `contacts:submit` — пользователь нажал «Оплатить» во втором шаге (email + телефон).
+- `modal:open` — любое модальное окно открылось (Modal.open()).
+- `modal:close` — любое модальное окно закрылось (Modal.close()).
+- `order.payment:change`, `order.address:change`, `contacts.email:change`, `contacts.phone:change` - ввод или выбор в соответствующих полях формы (все обрабатываются общим паттерном `/^(?:order|contacts)\.(payment|address|email|phone):change$/`).
