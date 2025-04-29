@@ -45,7 +45,7 @@ yarn build
 
 Товар
 ```
-export interface IProduct {
+interface IProduct {
   id: string;
   description: string;
   image: string;
@@ -57,7 +57,7 @@ export interface IProduct {
 
 Способы оплаты
 ```
-export enum PaymentMethod {
+enum PaymentMethod {
   Card = 'card',
   Cash = 'cash',
 }
@@ -65,7 +65,7 @@ export enum PaymentMethod {
 
 Данные формы заказа
 ```
-export interface IOrderForm {
+interface IOrderForm {
   payment: PaymentMethod;
   email: string;
   phone: string;
@@ -75,7 +75,7 @@ export interface IOrderForm {
 
 Заказ, отправляемый на сервер
 ```
-export interface IOrder extends IOrderForm {
+interface IOrder extends IOrderForm {
   total: number;
   items: IProduct['id'][];
 }
@@ -83,7 +83,7 @@ export interface IOrder extends IOrderForm {
 
 Ответ сервера
 ```
-export interface IOrderResponse {
+interface IOrderResponse {
   id: string;
   total: number;
 }
@@ -91,12 +91,12 @@ export interface IOrderResponse {
 
 Ошибки формы
 ```
-export type FormErrors<T extends object> = Partial<Record<keyof T, string>>;
+type FormErrors<T extends object> = Partial<Record<keyof T, string>>;
 ```
 
 Состояние приложения
 ```
-export interface IAppState {
+interface IAppState {
   products: IProduct[];
   preview: string | null;
   basket: IProduct[];
