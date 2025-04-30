@@ -6,11 +6,15 @@ import {
 	FormErrors,
 	PaymentMethod,
 } from '../../types';
-import { Events } from '../../utils/constants';
+import {
+	Events,
+	ValidationMessages,
+	ValidationRegex,
+} from '../../utils/constants';
 
 // Событие изменения списка продуктов
 export type ProductsChangeEvent = {
-	products: Product[];
+	products: IProduct[];
 };
 
 // Событие изменения формы заказа
@@ -32,21 +36,11 @@ export type OrderSubmitEvent = {
 	items: string[];
 };
 
-// Модель товара
-export class Product extends Model<IProduct> {
-	id: string;
-	description: string;
-	image: string;
-	title: string;
-	category: string;
-	price: number | null;
-}
-
 // Основная модель приложения: хранит товары, корзину и состояние оформления заказа
 export class AppState extends Model<IAppState> {
-	products: Product[] = [];
+	products: IProduct[] = [];
 	preview: string | null = null;
-	basket: Product[] = [];
+	basket: IProduct[] = [];
 
 	// Данные формы заказа
 	orderForm: IOrderForm = {
@@ -61,21 +55,21 @@ export class AppState extends Model<IAppState> {
 
 	// Устанавливает список продуктов и уведомляет UI
 	setProducts(items: IProduct[]) {
-		this.products = items.map((item) => new Product(item, this.events));
+		this.products = items;
 		this.emitChanges(Events.ITEMS_CHANGED, { products: this.products });
 	}
 
 	// Задает товар для предпросмотра
-	setPreview(item: Product) {
+	setPreview(item: IProduct) {
 		this.preview = item.id;
 		this.emitChanges(Events.PREVIEW_CHANGED, item);
 	}
 
 	// Добавляет или удаляет товар в корзине, при цене=null блокирует
-	toggleProduct(item: Product) {
+	toggleProduct(item: IProduct) {
 		// Добавляем проверку на товар с нулевой ценой, так как атрибут disabled можно обойти
 		if (item.price === null) {
-			console.warn(`Нельзя добавить товар ${item.id} без цены`);
+			console.warn(ValidationMessages.PRICE_REQUIRED(item.id));
 			return;
 		}
 		const exists = this.basket.some((p) => p.id === item.id);
@@ -95,6 +89,18 @@ export class AppState extends Model<IAppState> {
 		this.emitChanges(Events.BASKET_CHANGED, { items: [], total: 0 });
 	}
 
+	// Сбрасывает форму заказа
+	clearOrderForm() {
+		this.orderForm = {
+			payment: PaymentMethod.Card,
+			email: '',
+			phone: '',
+			address: '',
+		};
+		this.formErrors = {};
+		this.emitChanges(Events.FORM_RESET, this.orderForm);
+	}
+
 	// Вычисляет общую сумму корзины
 	getTotal(): number {
 		return this.basket.reduce((sum, p) => sum + (p.price ?? 0), 0);
@@ -102,9 +108,10 @@ export class AppState extends Model<IAppState> {
 
 	// Обновляет поле формы заказа и выполняет валидацию текущего шага
 	setOrderField<K extends keyof IOrderForm>(field: K, value: IOrderForm[K]) {
-		this.orderForm[field] = value as any;
-		const step = field === 'payment' || field === 'address' ? 'delivery' : 'contacts'; // Определяем, какой шаг валидировать
-    this.validateStep(step, field);
+		this.orderForm[field] = value;
+		const step =
+			field === 'payment' || field === 'address' ? 'delivery' : 'contacts'; // Определяем, какой шаг валидировать
+		this.validateStep(step, field);
 	}
 
 	// Валидация формы заказа
@@ -116,25 +123,25 @@ export class AppState extends Model<IAppState> {
 
 		if (step === 'delivery') {
 			if (!this.orderForm.address) {
-				errors.address = 'Адрес обязателен';
+				errors.address = ValidationMessages.ADDRESS_REQUIRED;
 			}
 		} else {
 			// Проверяем email при изменении email или при финальной проверке
 			const email = this.orderForm.email;
 			if (changedField === 'email' || changedField === undefined) {
 				if (!email) {
-					errors.email = 'Email обязателен';
-				} else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-					errors.email = 'Неверный формат email';
+					errors.email = ValidationMessages.EMAIL_REQUIRED;
+				} else if (!ValidationRegex.EMAIL.test(email)) {
+					errors.email = ValidationMessages.EMAIL_INVALID;
 				}
 			}
 			// Проверяем телефон
 			const phone = this.orderForm.phone;
 			if (changedField === 'phone' || changedField === undefined) {
 				if (!phone) {
-					errors.phone = 'Телефон обязателен';
-				} else if (!/^\+?\d{7,15}$/.test(phone)) {
-					errors.phone = 'Неверный формат телефона';
+					errors.phone = ValidationMessages.PHONE_REQUIRED;
+				} else if (!ValidationRegex.PHONE.test(phone)) {
+					errors.phone = ValidationMessages.PHONE_INVALID;
 				}
 			}
 		}
@@ -147,8 +154,8 @@ export class AppState extends Model<IAppState> {
 			valid = !!this.orderForm.address;
 		} else {
 			// оба поля должны быть корректны одновременно
-			const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(this.orderForm.email);
-			const phoneOk = /^\+?\d{7,15}$/.test(this.orderForm.phone);
+			const emailOk = ValidationRegex.EMAIL.test(this.orderForm.email);
+			const phoneOk = ValidationRegex.PHONE.test(this.orderForm.phone);
 			valid = emailOk && phoneOk;
 		}
 
@@ -159,8 +166,8 @@ export class AppState extends Model<IAppState> {
 	// Финальная отправка заказа: полная валидация обоих шагов и эмит события
 	submitOrder() {
 		const okDelivery = this.validateStep('delivery');
-    const okContacts = this.validateStep('contacts');
-    if (!okDelivery || !okContacts) return;
+		const okContacts = this.validateStep('contacts');
+		if (!okDelivery || !okContacts) return;
 
 		const payload: OrderSubmitEvent = {
 			order: this.orderForm,

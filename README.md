@@ -151,19 +151,20 @@ interface IAppState {
 - `new AppState(initialState: IAppState, events: IEvents)` — создаёт модель с начальным `IAppState` и брокером событий.
 
 **Поля:**  
-- `products: Product[]` — загруженный каталог.  
+- `products: IProduct[]` — загруженный каталог.  
 - `preview: string|null` — ID товара для предпросмотра.  
-- `basket: Product[]` — список выбранных товаров.  
+- `basket: IProduct[]` — список выбранных товаров.  
 - `orderForm: IOrderForm` — текущие значения полей (payment, email, phone, address).  
 - `formErrors: FormErrors<IOrderForm>` — накопленные ошибки валидации.
 
 **Методы:**  
 - `setProducts(items: IProduct[]): void` — сохраняет товары, эмитит `items:changed`.  
-- `setPreview(item: Product): void` — сохраняет ID предпросмотра, эмитит `preview:changed`.  
-- `toggleProduct(item: Product): void` — добавляет/удаляет из корзины (`price!==null`), эмитит `basket:changed`.  
+- `setPreview(item: IProduct): void` — сохраняет ID предпросмотра, эмитит `preview:changed`.  
+- `toggleProduct(item: IProduct): void` — добавляет/удаляет из корзины (`price!==null`), эмитит `basket:changed`.  
 - `getTotal(): number` — считает сумму цен в корзине.  
 - `clearCart(): void` — очищает корзину, эмитит `basket:changed`.  
-- `setOrderField(field: keyof IOrderForm, value: any): void` — обновляет поле формы, запускает `validateStep`.  
+- `clearOrderForm(): void` — очищает данные формы, эмитит `orderForm:reset`.
+- `setOrderField(field: keyof IOrderForm, value: IOrderForm[K]): void` — обновляет поле формы, запускает `validateStep`.  
 - `validateStep(step: 'delivery'|'contacts', changedField?: keyof IOrderForm): boolean` — проверяет поля текущего шага, эмитит `orderForm:validated`.  
 - `submitOrder(): void` — финальная валидация обоих шагов и эмит `orderForm:submitted`.
 
@@ -294,6 +295,7 @@ interface IAppState {
 - `basket:changed` — изменилось содержимое корзины (вызывается в `toggleProduct` и `clearCart`), в data передаются `{ items: Product[]; total: number }`.
 - `orderForm:validated` — результат валидации текущего шага оформления (`validateStep`), в data передаётся `{ errors: FormErrors<IOrderForm>; valid: boolean }`.
 - `orderForm:submitted` — форма заказа прошла полную валидацию и готова к отправке (`submitOrder`), в data передаётся `{ order: IOrderForm; total: number; items: string[] }`.
+- `orderForm:reset` — сброс формы при успешном оформлении.
 
 ### События, возникающие при взаимодействии пользователя с интерфейсом (генерируются классами, отвечающими за представление)
 

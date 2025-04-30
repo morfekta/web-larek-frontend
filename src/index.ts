@@ -13,11 +13,7 @@ import { EventEmitter } from './components/base/events';
 import { cloneTemplate, ensureElement } from './utils/utils';
 
 // Модель данных
-import {
-	ProductsChangeEvent,
-	Product,
-	AppState,
-} from './components/Model/AppData';
+import { ProductsChangeEvent, AppState } from './components/Model/AppData';
 
 // Компоненты интерфейса
 import { Page } from './components/View/Page';
@@ -28,7 +24,7 @@ import { Card } from './components/View/Card';
 import { Success } from './components/View/common/Success';
 
 // Типы для формы заказа
-import { IOrderForm, FormErrors, PaymentMethod } from './types';
+import { IProduct, IOrderForm, FormErrors, PaymentMethod } from './types';
 
 // ---------------------------------------------
 // Инициализация
@@ -59,12 +55,19 @@ const modal = new Modal(
 	eventBus
 );
 
+eventBus.onAll(({ eventName, data }) => {
+	console.log(eventName, data);
+});
+
 const basketView = new Basket(cloneTemplate(templates.basket), eventBus);
 const deliveryForm = new DeliveryStep(cloneTemplate(templates.order), eventBus);
 const contactForm = new CustomerStep(
 	cloneTemplate(templates.contacts),
 	eventBus
 );
+const successView = new Success(cloneTemplate(templates.success), {
+	onClick: () => modal.close(),
+});
 
 // Храним текущий шаг двушаговой формы
 let currentStep: 'delivery' | 'contacts' = 'delivery';
@@ -72,7 +75,7 @@ let currentStep: 'delivery' | 'contacts' = 'delivery';
 // ---------------------------------------------
 // Рендеринг каталога
 // ---------------------------------------------
-function renderCatalog(products: Product[]) {
+function renderCatalog(products: IProduct[]) {
 	page.products = products.map((item) => {
 		const card = new Card(cloneTemplate(templates.cardCatalog), {
 			onClick: () => eventBus.emit(Events.CARD_SELECT, item),
@@ -84,7 +87,7 @@ function renderCatalog(products: Product[]) {
 // ---------------------------------------------
 // Рендеринг корзины (в модальном окне)
 // ---------------------------------------------
-function renderBasket(items: Product[], total: number) {
+function renderBasket(items: IProduct[], total: number) {
 	// обновляем счётчик
 	page.counter = items.length;
 
@@ -113,12 +116,12 @@ eventBus.on<ProductsChangeEvent>(Events.ITEMS_CHANGED, ({ products }) => {
 });
 
 // Пользователь выбрал карточку товара
-eventBus.on<Product>(Events.CARD_SELECT, (item) => {
+eventBus.on<IProduct>(Events.CARD_SELECT, (item) => {
 	appState.setPreview(item);
 });
 
 // Показ превью товара в модалке
-eventBus.on<Product>(Events.PREVIEW_CHANGED, (item) => {
+eventBus.on<IProduct>(Events.PREVIEW_CHANGED, (item) => {
 	const card = new Card(cloneTemplate(templates.cardPreview), {
 		onClick: () => {
 			eventBus.emit(Events.PRODUCT_TOGGLE, item);
@@ -135,7 +138,7 @@ eventBus.on<Product>(Events.PREVIEW_CHANGED, (item) => {
 });
 
 // Тоггл товара
-eventBus.on<Product>(Events.PRODUCT_TOGGLE, (item) => {
+eventBus.on<IProduct>(Events.PRODUCT_TOGGLE, (item) => {
 	appState.toggleProduct(item);
 });
 
@@ -146,7 +149,7 @@ eventBus.on(Events.BASKET_OPEN, () => {
 });
 
 // Обновление корзины
-eventBus.on<{ items: Product[]; total: number }>(
+eventBus.on<{ items: IProduct[]; total: number }>(
 	Events.BASKET_CHANGED,
 	({ items, total }) => renderBasket(items, total)
 );
@@ -210,6 +213,24 @@ eventBus.on<{ errors: FormErrors<IOrderForm>; valid: boolean }>(
 	}
 );
 
+// Подписка на сброс формы
+eventBus.on<IOrderForm>(Events.FORM_RESET, (form) => {
+	// Возвращаем шаг оформления на начальный
+	currentStep = 'delivery';
+
+	// Сбрасываем состояние и ошибки delivery-шагa
+	deliveryForm.valid = false;
+	deliveryForm.errors = '';
+	deliveryForm.payment = form.payment;
+	deliveryForm.address = form.address;
+
+	// Сбрасываем состояние и ошибки contacts-шагa
+	contactForm.valid = false;
+	contactForm.errors = '';
+	contactForm.email = form.email;
+	contactForm.phone = form.phone;
+});
+
 // Отправка заказа на сервер и показ экрана успеха
 eventBus.on<{
 	order: IOrderForm;
@@ -219,18 +240,16 @@ eventBus.on<{
 	apiClient
 		.order({ ...order, total, items })
 		.then(() => {
-			const successComp = new Success(cloneTemplate(templates.success), {
-				onClick: () => modal.close(),
-			});
-			modal.render({ content: successComp.render({ total }) });
+			modal.render({ content: successView.render({ total }) });
 			appState.clearCart();
+			appState.clearOrderForm();
 		})
 		.catch(console.error);
 });
 
 // Блокировка скролла при открытии/закрытии модалки
-eventBus.on('modal:open', () => (page.locked = true));
-eventBus.on('modal:close', () => (page.locked = false));
+eventBus.on(Events.MODAL_OPEN, () => (page.locked = true));
+eventBus.on(Events.MODAL_CLOSE, () => (page.locked = false));
 
 // Загрузка товаров с сервера
 apiClient

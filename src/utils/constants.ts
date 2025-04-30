@@ -21,4 +21,19 @@ export const Events = {
 		/^(?:order|contacts)\.(payment|address|email|phone):change$/,
 	FORM_VALIDATED: 'orderForm:validated' as const,
 	FORM_SUBMITTED: 'orderForm:submitted' as const,
+	FORM_RESET: 'orderForm:reset' as const,
+};
+
+export const ValidationMessages = {
+  ADDRESS_REQUIRED: 'Адрес обязателен',
+  EMAIL_REQUIRED: 'Email обязателен',
+  EMAIL_INVALID: 'Неверный формат email',
+  PHONE_REQUIRED: 'Телефон обязателен',
+  PHONE_INVALID: 'Неверный формат телефона',
+  PRICE_REQUIRED: (id: string) => `Нельзя добавить товар ${id} без цены`,
+};
+
+export const ValidationRegex = {
+  EMAIL: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, 
+  PHONE: /^\+?\d{7,15}$/,
 };

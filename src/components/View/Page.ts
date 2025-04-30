@@ -38,10 +38,6 @@ export class Page extends Component<IPage> {
 
 	// Блокирует страницу при открытии модального окна
 	set locked(value: boolean) {
-		if (value) {
-			this.wrapper.classList.add('page__wrapper_locked');
-		} else {
-			this.wrapper.classList.remove('page__wrapper_locked');
-		}
+		this.toggleClass(this.wrapper, 'page__wrapper_locked', value);
 	}
 }

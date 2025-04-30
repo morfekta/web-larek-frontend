@@ -34,11 +34,13 @@ export class DeliveryStep extends Form<IOrderForm> {
 	}
 
 	set payment(value: PaymentMethod) {
-		this.cardBtn.classList.toggle(
+		this.toggleClass(
+			this.cardBtn,
 			'button_alt-active',
 			value === PaymentMethod.Card
 		);
-		this.cashBtn.classList.toggle(
+		this.toggleClass(
+			this.cashBtn,
 			'button_alt-active',
 			value === PaymentMethod.Cash
 		);
