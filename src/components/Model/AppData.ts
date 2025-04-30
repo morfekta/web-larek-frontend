@@ -73,6 +73,7 @@ export class AppState extends Model<IAppState> {
 
 	// Добавляет или удаляет товар в корзине, при цене=null блокирует
 	toggleProduct(item: Product) {
+		// Добавляем проверку на товар с нулевой ценой, так как атрибут disabled можно обойти
 		if (item.price === null) {
 			console.warn(`Нельзя добавить товар ${item.id} без цены`);
 			return;
